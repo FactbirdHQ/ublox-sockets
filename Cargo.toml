@@ -14,13 +14,12 @@ documentation = "https://docs.rs/ublox-sockets"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "^1", default-features = false, features = ["derive"] }
-heapless = { version = "^0.8", features = ["serde"] }
-no-std-net = { version = "0.6", features = ["serde"] }
-embassy-time = "0.3"
+serde = { version = "1", default-features = false, features = ["derive"] }
+heapless = { version = "0.8", features = ["serde"] }
+embassy-time = "0.4"
 
-log = { version = "^0.4", default-features = false, optional = true }
-defmt = { version = "^0.3", optional = true }
+log = { version = "0.4", default-features = false, optional = true }
+defmt = { version = "0.3", optional = true }
 
 [features]
 default = ["socket-udp", "socket-tcp", "defmt"]
@@ -31,6 +30,3 @@ edm = []
 
 socket-tcp = []
 socket-udp = []
-
-[patch.crates-io]
-no-std-net = { git = "https://github.com/rushmorem/no-std-net", branch = "issue-15" }

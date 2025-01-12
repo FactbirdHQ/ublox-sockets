@@ -1,6 +1,6 @@
 use super::{Error, PeerHandle, Result, RingBuffer};
+use core::net::SocketAddr;
 use embassy_time::{Duration, Instant};
-use no_std_net::SocketAddr;
 
 /// A TCP socket ring buffer.
 pub type SocketBuffer<'a> = RingBuffer<'a, u8>;
