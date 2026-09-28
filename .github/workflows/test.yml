@@ -12,13 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
 
       - name: Install Rust
-        uses: dsherret/rust-toolchain-file@v1
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: thumbv7m-none-eabi
+          override: true
 
       - name: Build
-        run: cargo build --all --target thumbv7m-none-eabi
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --all --target thumbv7m-none-eabi
 
       - name: Test
-        run: cargo test --lib
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --lib

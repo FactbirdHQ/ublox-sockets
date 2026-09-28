@@ -1,19 +1,23 @@
 use core::cmp::min;
 
-use super::{Error, Result, RingBuffer, Socket, SocketHandle, SocketMeta};
+use super::{Error, PeerHandle, Result, RingBuffer};
+pub use core::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use embassy_time::{Duration, Instant};
-use no_std_net::SocketAddr;
 
 /// A UDP socket ring buffer.
-pub type SocketBuffer<const N: usize> = RingBuffer<u8, N>;
+pub type SocketBuffer<'a> = RingBuffer<'a, u8>;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[derive(Default)]
 pub enum State {
-    #[default]
     Closed,
     Established,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State::Closed
+    }
 }
 
 /// A User Datagram Protocol socket.
@@ -21,48 +25,79 @@ pub enum State {
 /// A UDP socket is bound to a specific endpoint, and owns transmit and receive
 /// packet buffers.
 #[derive(Debug)]
-pub struct UdpSocket<const L: usize> {
-    pub(crate) meta: SocketMeta,
-    pub(crate) endpoint: Option<SocketAddr>,
+pub struct Socket<'a> {
+    pub peer_handle: Option<PeerHandle>,
+    #[cfg(feature = "edm")]
+    pub edm_channel: Option<super::ChannelId>,
+    pub endpoint: Option<SocketAddr>,
     check_interval: Duration,
     read_timeout: Option<Duration>,
     state: State,
     available_data: usize,
-    rx_buffer: SocketBuffer<L>,
+    rx_buffer: SocketBuffer<'a>,
+    tx_buffer: SocketBuffer<'a>,
     last_check_time: Option<Instant>,
     closed_time: Option<Instant>,
+
+    rx_waker: crate::waker::WakerRegistration,
+    tx_waker: crate::waker::WakerRegistration,
 }
 
-impl<const L: usize> UdpSocket<L> {
+impl<'a> Socket<'a> {
     /// Create an UDP socket with the given buffers.
-    pub fn new(socket_id: u8) -> UdpSocket<L> {
-        UdpSocket {
-            meta: SocketMeta {
-                handle: SocketHandle(socket_id),
-            },
+    pub fn new(
+        rx_buffer: impl Into<SocketBuffer<'a>>,
+        tx_buffer: impl Into<SocketBuffer<'a>>,
+    ) -> Socket<'a> {
+        Socket {
+            peer_handle: None,
+            #[cfg(feature = "edm")]
+            edm_channel: None,
             check_interval: Duration::from_secs(15),
             state: State::Closed,
             read_timeout: Some(Duration::from_secs(15)),
             endpoint: None,
             available_data: 0,
-            rx_buffer: SocketBuffer::new(),
+            rx_buffer: rx_buffer.into(),
+            tx_buffer: tx_buffer.into(),
             last_check_time: None,
             closed_time: None,
+            rx_waker: crate::waker::WakerRegistration::new(),
+            tx_waker: crate::waker::WakerRegistration::new(),
         }
     }
 
-    /// Return the socket handle.
-    pub fn handle(&self) -> SocketHandle {
-        self.meta.handle
+    /// Register a waker for receive operations.
+    ///
+    /// The waker is woken on state changes that might affect the return value
+    /// of `recv` method calls, such as receiving data, or the socket closing.
+    ///
+    /// Notes:
+    ///
+    /// - Only one waker can be registered at a time. If another waker was previously registered,
+    ///   it is overwritten and will no longer be woken.
+    /// - The Waker is woken only once. Once woken, you must register it again to receive more wakes.
+    /// - "Spurious wakes" are allowed: a wake doesn't guarantee the result of `recv` has
+    ///   necessarily changed.
+    pub fn register_recv_waker(&mut self, waker: &core::task::Waker) {
+        self.rx_waker.register(waker)
     }
 
-    pub fn update_handle(&mut self, handle: SocketHandle) {
-        debug!(
-            "[UDP Socket] [{:?}] Updating handle {:?}",
-            self.handle(),
-            handle
-        );
-        self.meta.update(handle)
+    /// Register a waker for send operations.
+    ///
+    /// The waker is woken on state changes that might affect the return value
+    /// of `send` method calls, such as space becoming available in the transmit
+    /// buffer, or the socket closing.
+    ///
+    /// Notes:
+    ///
+    /// - Only one waker can be registered at a time. If another waker was previously registered,
+    ///   it is overwritten and will no longer be woken.
+    /// - The Waker is woken only once. Once woken, you must register it again to receive more wakes.
+    /// - "Spurious wakes" are allowed: a wake doesn't guarantee the result of `send` has
+    ///   necessarily changed.
+    pub fn register_send_waker(&mut self, waker: &core::task::Waker) {
+        self.tx_waker.register(waker)
     }
 
     /// Return the bound endpoint.
@@ -78,9 +113,7 @@ impl<const L: usize> UdpSocket<L> {
     pub fn set_state(&mut self, state: State) {
         debug!(
             "[UDP Socket] {:?}, state change: {:?} -> {:?}",
-            self.handle(),
-            self.state,
-            state
+            self.peer_handle, self.state, state
         );
         self.state = state
     }
@@ -133,6 +166,10 @@ impl<const L: usize> UdpSocket<L> {
         }
 
         self.endpoint.replace(endpoint.into());
+
+        self.rx_waker.wake();
+        self.tx_waker.wake();
+
         Ok(())
     }
 
@@ -160,7 +197,7 @@ impl<const L: usize> UdpSocket<L> {
 
     fn recv_impl<'b, F, R>(&'b mut self, f: F) -> Result<R>
     where
-        F: FnOnce(&'b mut SocketBuffer<L>) -> (usize, R),
+        F: FnOnce(&'b mut SocketBuffer<'a>) -> (usize, R),
     {
         // We may have received some data inside the initial SYN, but until the connection
         // is fully open we must not dequeue any data, as it may be overwritten by e.g.
@@ -227,18 +264,14 @@ impl<const L: usize> UdpSocket<L> {
 
     pub fn close(&mut self) {
         self.endpoint.take();
+        self.rx_waker.wake();
+        self.tx_waker.wake();
     }
 }
 
 #[cfg(feature = "defmt")]
-impl<const L: usize> defmt::Format for UdpSocket<L> {
+impl<'a> defmt::Format for Socket<'a> {
     fn format(&self, fmt: defmt::Formatter) {
-        defmt::write!(fmt, "[{:?}, {:?}],", self.handle(), self.state())
-    }
-}
-
-impl<const L: usize> From<UdpSocket<L>> for Socket<L> {
-    fn from(val: UdpSocket<L>) -> Self {
-        Socket::Udp(val)
+        defmt::write!(fmt, "[{:?}, {:?}],", self.peer_handle, self.state())
     }
 }

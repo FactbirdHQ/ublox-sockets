@@ -1,5 +1,5 @@
-use heapless::{spsc::Queue, FnvIndexMap};
-use no_std_net::SocketAddr;
+use core::net::SocketAddr;
+use heapless::{index_map::FnvIndexMap, spsc::Queue};
 
 use crate::{Error, SocketHandle};
 
@@ -8,12 +8,6 @@ pub struct UdpListener<const N: usize, const L: usize> {
     handles: FnvIndexMap<SocketHandle, u16, N>,
     /// Maps Connection Sockets to remote socket address
     connections: FnvIndexMap<u16, Queue<(SocketHandle, SocketAddr), L>, N>,
-}
-
-impl<const N: usize, const L: usize> Default for UdpListener<N, L> {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl<const N: usize, const L: usize> UdpListener<N, L> {

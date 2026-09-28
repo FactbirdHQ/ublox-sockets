@@ -1,17 +1,11 @@
-use heapless::{spsc::Queue, FnvIndexMap};
-use no_std_net::SocketAddr;
+use core::net::SocketAddr;
+use heapless::{index_map::FnvIndexMap, spsc::Queue};
 
 use crate::SocketHandle;
 
 pub struct TcpListener<const N: usize, const L: usize> {
     handles: FnvIndexMap<SocketHandle, u16, N>,
     connections: FnvIndexMap<u16, Queue<(SocketHandle, SocketAddr), L>, N>,
-}
-
-impl<const N: usize, const L: usize> Default for TcpListener<N, L> {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl<const N: usize, const L: usize> TcpListener<N, L> {
