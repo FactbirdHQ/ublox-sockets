@@ -1,5 +1,5 @@
 use core::net::SocketAddr;
-use heapless::{spsc::Queue, FnvIndexMap};
+use heapless::{index_map::FnvIndexMap, spsc::Queue};
 
 use crate::SocketHandle;
 

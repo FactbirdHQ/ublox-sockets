@@ -1,30 +1,30 @@
 [package]
 name = "ublox-sockets"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
-authors = ["Mathias Koch <mk@blackbird.online>"]
+authors = ["Mathias Koch <mk@factbird.com>"]
 description = "Common sockets layer for host-based ublox devices"
 readme = "README.md"
 keywords = ["arm", "cortex-m", "AT", "no-std"]
 categories = ["embedded", "no-std"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/BlackbirdHQ/ublox-sockets"
+repository = "https://github.com/FactbirdHQ/ublox-sockets"
 documentation = "https://docs.rs/ublox-sockets"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["derive"] }
-heapless = { version = "0.8", features = ["serde"] }
-embassy-time = "0.5.0"
+heapless = { version = "0.9", features = ["serde"] }
+embassy-time = "0.5"
 
 log = { version = "0.4", default-features = false, optional = true }
-defmt = { version = "0.3", optional = true }
+defmt = { version = "1", optional = true }
 
 [features]
-default = ["socket-udp", "socket-tcp", "defmt"]
+default = ["socket-udp", "socket-tcp"]
 
-defmt = ["dep:defmt", "embassy-time/defmt", "heapless/defmt-03"]
+defmt = ["dep:defmt", "embassy-time/defmt", "heapless/defmt"]
 
 edm = []
 
